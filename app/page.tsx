@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart3,
@@ -30,10 +30,13 @@ import {
   PolarRadiusAxis,
   CartesianGrid,
 } from 'recharts';
-import { calendarScores, eventLogs, partners, userProfile, weekSeries, monthSeries } from '@/lib/data';
+import { calendarScores, userProfile, weekSeries, monthSeries } from '@/lib/data';
 import type { Partner } from '@/lib/data';
-import { buildTarotInterpretation, clamp, generateStory, makeInsight, tarotSpreadLabels, translateZodiac } from '@/lib/utils';
-import { PartnerAvatar, getAvatarAnimal, getAvatarLabel } from '@/lib/avatars';
+import { clamp, makeInsight, tarotSpreadLabels, translateZodiac } from '@/lib/utils';
+import { PartnerAvatar, getAvatarLabel } from '@/lib/avatars';
+import { useAiStream } from '@/lib/hooks/useAiStream';
+import type { TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload } from '@/lib/ai/types';
+import { supabase } from '@/lib/supabase';
 
 const tabs = [
   { id: 'mypage', label: '마이페이지' },
@@ -46,7 +49,7 @@ type TabId = (typeof tabs)[number]['id'];
 
 export default function Page() {
   const [tab, setTab] = useState<TabId>('mypage');
-  const [partnerList, setPartnerList] = useState<Partner[]>(partners);
+  const [partnerList, setPartnerList] = useState<Partner[]>([]);
   const [selectedPartnerId, setSelectedPartnerId] = useState('');
   const [tarotDeck, setTarotDeck] = useState('Universal Waite');
   const [tarotSpread, setTarotSpread] = useState<'three-card' | 'celtic-cross'>('three-card');
@@ -60,6 +63,40 @@ export default function Page() {
   const [newBirthTime, setNewBirthTime] = useState('');
   const [newBirthPlace, setNewBirthPlace] = useState('');
   const [newChartText, setNewChartText] = useState('');
+
+  // 일화 로그 상태
+  const [logs, setLogs] = useState<{ date: string; partner: string; tag: string; text: string }[]>([]);
+  const [newEventText, setNewEventText] = useState('');
+  const [newEventTag, setNewEventTag] = useState('일화');
+
+  // Supabase에서 초기 데이터 로드
+  useEffect(() => {
+    supabase.from('partners').select('*').order('created_at').then(({ data }) => {
+      if (!data) return;
+      setPartnerList(data.map((r) => ({
+        id: r.id,
+        name: r.name,
+        mbti: r.mbti ?? '',
+        animal: r.animal ?? '',
+        birth: { date: r.birth_date ?? '', time: r.birth_time ?? '', place: r.birth_place ?? '' },
+        chart: r.chart ?? {},
+        romanceStyle: r.romance_style ?? '',
+        attraction: r.attraction ?? '',
+        compatibility: r.compatibility ?? { chemistry: 0, stability: 0, communication: 0, timing: 0, trust: 0 },
+        notes: r.notes ?? [],
+      })));
+    });
+    supabase.from('event_logs').select('*').order('created_at').then(({ data }) => {
+      if (!data) return;
+      setLogs(data.map((r) => ({ date: r.date, partner: r.partner_name, tag: r.tag, text: r.text })));
+    });
+  }, []);
+
+  // AI 훅
+  const tarotAi = useAiStream();
+  const storyAi = useAiStream();
+  const aspectAi = useAiStream();
+  const eventAi = useAiStream();
 
   function savePartner() {
     if (!newName.trim()) return;
@@ -88,6 +125,20 @@ export default function Page() {
     setPartnerList(prev => [...prev, newPartner]);
     setSelectedPartnerId(newPartner.id);
     setNewName(''); setNewMbti(''); setNewBirthDate(''); setNewBirthTime(''); setNewBirthPlace(''); setNewChartText('');
+    supabase.from('partners').insert({
+      id: newPartner.id,
+      name: newPartner.name,
+      mbti: newPartner.mbti,
+      animal: newPartner.animal,
+      birth_date: newPartner.birth.date,
+      birth_time: newPartner.birth.time,
+      birth_place: newPartner.birth.place,
+      chart: newPartner.chart,
+      romance_style: newPartner.romanceStyle,
+      attraction: newPartner.attraction,
+      compatibility: newPartner.compatibility,
+      notes: newPartner.notes,
+    }).then(({ error }) => { if (error) console.error('파트너 저장 실패:', error.message); });
   }
 
   const partner = useMemo(
@@ -96,17 +147,22 @@ export default function Page() {
   );
   const labels = tarotSpreadLabels(tarotSpread);
 
-  const tarotInterpretation = useMemo(
-    () =>
-      buildTarotInterpretation({
-        partnerName: partner?.name ?? '상대',
-        deck: tarotDeck,
-        spread: tarotSpread,
-        question,
-        cards: tarotCards,
-      }),
-    [partner?.name, tarotDeck, tarotSpread, question, tarotCards]
-  );
+  // 파트너 상세 탭 진입 시 스토리 자동 생성
+  useEffect(() => {
+    if (partner && tab === 'detail') {
+      const payload: PartnerStoryPayload = {
+        feature: 'partnerStory',
+        partnerName: partner.name,
+        partnerMbti: partner.mbti,
+        partnerChart: partner.chart,
+        partnerCompatibility: partner.compatibility,
+        partnerNotes: partner.notes,
+        recentEvents: logs.filter((e) => e.partner === partner.name).slice(-5),
+      };
+      storyAi.run(payload);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partner?.id, tab]);
 
   function onChangeSpread(next: 'three-card' | 'celtic-cross') {
     setTarotSpread(next);
@@ -408,7 +464,31 @@ export default function Page() {
                 <div className="text-box box-sky">
                   <strong>스토리 해석</strong>
                   <br />
-                  {generateStory(partner)}
+                  {storyAi.loading && (
+                    <motion.span
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                    >
+                      ✨ 리딩 중...
+                    </motion.span>
+                  )}
+                  {storyAi.error && <span style={{ color: '#f87171' }}>{storyAi.error}</span>}
+                  {storyAi.text && <span>{storyAi.text}</span>}
+                  {!storyAi.loading && !storyAi.text && !storyAi.error && (
+                    <button className="btn" onClick={() => {
+                      const payload: PartnerStoryPayload = {
+                        feature: 'partnerStory',
+                        partnerName: partner.name,
+                        partnerMbti: partner.mbti,
+                        partnerChart: partner.chart,
+                        partnerCompatibility: partner.compatibility,
+                        partnerNotes: partner.notes,
+                        recentEvents: logs.filter((e) => e.partner === partner.name).slice(-5),
+                      };
+                      storyAi.run(payload);
+                    }}>AI 스토리 리딩</button>
+                  )}
                 </div>
               </section>
 
@@ -531,7 +611,35 @@ export default function Page() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-box box-sky">차트 텍스트를 저장하면 애스팩트 분석이 자동으로 채워집니다.</div>
+                  <div className="text-box box-sky">
+                    {aspectAi.loading && (
+                      <motion.span
+                        initial={{ opacity: 0.5 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                      >
+                        ✨ 애스팩트 분석 중...
+                      </motion.span>
+                    )}
+                    {aspectAi.error && <span style={{ color: '#f87171' }}>{aspectAi.error}</span>}
+                    {aspectAi.text && <span>{aspectAi.text}</span>}
+                    {!aspectAi.loading && !aspectAi.text && !aspectAi.error && (
+                      <>
+                        <span>차트 텍스트를 저장하면 AI 애스팩트 분석을 실행할 수 있습니다.</span>
+                        <div style={{ marginTop: 10 }}>
+                          <button className="btn" onClick={() => {
+                            const payload: AspectAnalysisPayload = {
+                              feature: 'aspectAnalysis',
+                              partnerName: partner.name,
+                              partnerChart: partner.chart,
+                              partnerNotes: partner.notes,
+                            };
+                            aspectAi.run(payload);
+                          }}>AI 애스팩트 분석</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 )}
               </section>
 
@@ -543,7 +651,7 @@ export default function Page() {
                 <div className="panel-desc">실제 있었던 일을 넣으면 해석 문장이 갱신되는 구조</div>
                 <div className="grid-2">
                   <div className="space-y">
-                    {eventLogs.filter((e) => e.partner === partner.name).map((log) => (
+                    {logs.filter((e) => e.partner === partner.name).map((log) => (
                       <div key={log.date + log.text} className="log-item">
                         <div className="flex" style={{ justifyContent: 'space-between' }}>
                           <strong>{log.tag}</strong>
@@ -552,13 +660,66 @@ export default function Page() {
                         <div style={{ marginTop: 8, lineHeight: 1.7, fontSize: 14 }}>{log.text}</div>
                       </div>
                     ))}
-                    <textarea className="textarea" placeholder="새로운 일화 추가: 그날 있었던 대화, 분위기, 상대의 표정, 약속의 확정/취소, SNS 반응 등" />
-                    <button className="btn primary">로그 저장 후 해석 갱신</button>
+                    <input
+                      className="input"
+                      placeholder="태그 (예: 대화, 약속, SNS 반응)"
+                      value={newEventTag}
+                      onChange={(e) => setNewEventTag(e.target.value)}
+                    />
+                    <textarea
+                      className="textarea"
+                      placeholder="새로운 일화 추가: 그날 있었던 대화, 분위기, 상대의 표정, 약속의 확정/취소, SNS 반응 등"
+                      value={newEventText}
+                      onChange={(e) => setNewEventText(e.target.value)}
+                    />
+                    <button
+                      className="btn primary"
+                      onClick={() => {
+                        if (!newEventText.trim()) return;
+                        const entry = {
+                          date: new Date().toISOString().slice(0, 10),
+                          partner: partner.name,
+                          tag: newEventTag.trim() || '일화',
+                          text: newEventText.trim(),
+                        };
+                        setLogs((prev) => [...prev, entry]);
+                        supabase.from('event_logs').insert({
+                          partner_name: entry.partner,
+                          tag: entry.tag,
+                          text: entry.text,
+                          date: entry.date,
+                        }).then(({ error }) => { if (error) console.error('로그 저장 실패:', error.message); });
+                        const payload: EventLogPayload = {
+                          feature: 'eventLog',
+                          eventText: entry.text,
+                          eventTag: entry.tag,
+                          partnerName: partner.name,
+                          partnerChart: partner.chart,
+                          partnerCompatibility: partner.compatibility,
+                        };
+                        eventAi.run(payload);
+                        setNewEventText('');
+                        setNewEventTag('일화');
+                      }}
+                    >
+                      로그 저장 후 해석 갱신
+                    </button>
                   </div>
                   <div className="text-box box-violet">
-                    <strong>스토리 모드 예시</strong>
-                    <br />
-                    최근 로그 기준으로 보면, {partner.name}과의 관계는 감정 공백 상태가 아니라 신중한 탐색 단계에 가깝습니다. 연락의 질은 올라가고 있으나, 상대가 확신을 언어화하기보다는 질문·관찰·맥락 수집으로 반응하는 패턴이 보입니다. 지금은 감정 확인을 몰아붙이기보다, 상대가 스스로 관계의 안정성을 체감하게 하는 흐름이 더 유리합니다.
+                    {eventAi.loading && (
+                      <motion.span
+                        initial={{ opacity: 0.5 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                      >
+                        ✨ 일화 해석 중...
+                      </motion.span>
+                    )}
+                    {eventAi.error && <span style={{ color: '#f87171' }}>{eventAi.error}</span>}
+                    {eventAi.text && <span>{eventAi.text}</span>}
+                    {!eventAi.loading && !eventAi.text && !eventAi.error && (
+                      <span>일화를 저장하면 AI가 관계 맥락에서 해석해드립니다.</span>
+                    )}
                   </div>
                 </div>
               </section>
@@ -642,22 +803,59 @@ export default function Page() {
               해석 결과
             </div>
             <div className="panel-desc">상황·상대 특성·질문·입력 카드 조합형 해석</div>
-            <motion.div
-              initial={{ opacity: 0.7, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
-              className="loading-box"
+
+            <button
+              className="btn primary"
+              style={{ width: '100%', marginBottom: 12 }}
+              disabled={tarotAi.loading}
+              onClick={() => {
+                const payload: TarotPayload = {
+                  feature: 'tarot',
+                  deck: tarotDeck,
+                  spread: tarotSpread,
+                  spreadLabels: labels,
+                  question,
+                  cards: tarotCards,
+                  partnerName: partner?.name ?? '상대',
+                  partnerChart: partner?.chart ?? {},
+                  partnerMbti: partner?.mbti ?? '',
+                  partnerCompatibility: partner?.compatibility ?? {},
+                };
+                tarotAi.run(payload);
+              }}
             >
-              ✨ 카드와 로그, 차트 패턴을 조합해서 스토리 리딩 중...
-            </motion.div>
-            <div style={{ height: 12 }} />
-            <div className="text-box box-amber">{tarotInterpretation}</div>
-            <div style={{ height: 12 }} />
-            <div className="text-box box-sky">
-              <strong>입력 방식 요약</strong>
-              <br />
-              3카드면 1, 2, 3 자리에 카드명을 각각 적고, 켈틱이면 1~10 자리에 카드명을 적으면 됩니다. 실제 구현에서는 카드명 파싱 후 의미 사전, 수비학, 원소, 점성 대응, 선택 덱의 톤, 상대 차트와 일화 로그를 함께 반영하도록 API 레이어를 붙이면 됩니다.
-            </div>
+              {tarotAi.loading ? '리딩 중...' : '✨ 리딩 시작'}
+            </button>
+
+            {tarotAi.loading && (
+              <motion.div
+                initial={{ opacity: 0.7, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                className="loading-box"
+              >
+                ✨ 카드와 로그, 차트 패턴을 조합해서 스토리 리딩 중...
+              </motion.div>
+            )}
+            {tarotAi.error && (
+              <div className="text-box box-amber" style={{ marginBottom: 12 }}>{tarotAi.error}</div>
+            )}
+            {tarotAi.text && (
+              <>
+                <div style={{ height: 12 }} />
+                <div className="text-box box-amber">{tarotAi.text}</div>
+              </>
+            )}
+            {!tarotAi.loading && !tarotAi.text && !tarotAi.error && (
+              <>
+                <div style={{ height: 12 }} />
+                <div className="text-box box-sky">
+                  <strong>입력 방식 요약</strong>
+                  <br />
+                  3카드면 1, 2, 3 자리에 카드명을 각각 적고, 켈틱이면 1~10 자리에 카드명을 적으면 됩니다. 카드를 모두 입력한 뒤 리딩 시작 버튼을 누르세요.
+                </div>
+              </>
+            )}
           </section>
         </div>
       )}
