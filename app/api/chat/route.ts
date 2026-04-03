@@ -17,22 +17,33 @@ export async function POST(req: NextRequest) {
     return new Response('잘못된 요청 형식입니다.', { status: 400 });
   }
 
-  const stream = await openai.chat.completions.create({
-    model: 'gpt-4o',
-    stream: true,
-    temperature: 0.85,
-    max_tokens: 600,
-    messages: [
-      { role: 'system', content: buildSystemPrompt() },
-      { role: 'user', content: buildUserMessage(payload) },
-    ],
-  });
+  let stream;
+  try {
+    stream = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      stream: true,
+      temperature: 0.85,
+      max_tokens: 600,
+      messages: [
+        { role: 'system', content: buildSystemPrompt() },
+        { role: 'user', content: buildUserMessage(payload) },
+      ],
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : 'OpenAI 호출 실패';
+    return new Response(msg, { status: 500 });
+  }
 
   const readable = new ReadableStream({
     async start(controller) {
-      for await (const chunk of stream) {
-        const text = chunk.choices[0]?.delta?.content ?? '';
-        if (text) controller.enqueue(new TextEncoder().encode(text));
+      try {
+        for await (const chunk of stream) {
+          const text = chunk.choices[0]?.delta?.content ?? '';
+          if (text) controller.enqueue(new TextEncoder().encode(text));
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : '스트리밍 오류';
+        controller.enqueue(new TextEncoder().encode(`\n[오류: ${msg}]`));
       }
       controller.close();
     },
