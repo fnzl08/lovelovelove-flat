@@ -533,21 +533,8 @@ export default function Page() {
                 <div style={{ height: 12 }} />
                 <div className="text-box box-pink">
                   <strong>연애 스타일</strong>
-                  <br />
-                  {profileAi.loading && !partner.romanceStyle && (
-                    <motion.span
-                      initial={{ opacity: 0.5 }}
-                      animate={{ opacity: 1 }}
-                      transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
-                    >
-                      ✨ 분석 중...
-                    </motion.span>
-                  )}
-                  {profileAi.error && !partner.romanceStyle && (
-                    <span style={{ color: '#f87171' }}>{profileAi.error}</span>
-                  )}
-                  {partner.romanceStyle || (!profileAi.loading && !profileAi.error && (
-                    <button className="btn" style={{ marginTop: 4 }} onClick={() => {
+                  {!profileAi.loading && (
+                    <button className="btn" style={{ float: 'right', fontSize: 11, padding: '2px 8px' }} onClick={() => {
                       const payload: PartnerProfilePayload = {
                         feature: 'partnerProfile',
                         partnerName: partner.name,
@@ -556,14 +543,10 @@ export default function Page() {
                       };
                       setGeneratingProfileFor(partner.id);
                       profileAi.run(payload);
-                    }}>AI 프로필 생성</button>
-                  ))}
-                </div>
-                <div style={{ height: 12 }} />
-                <div className="text-box box-violet">
-                  <strong>끌리는 타입</strong>
+                    }}>↺ 재생성</button>
+                  )}
                   <br />
-                  {profileAi.loading && !partner.attraction && (
+                  {profileAi.loading ? (
                     <motion.span
                       initial={{ opacity: 0.5 }}
                       animate={{ opacity: 1 }}
@@ -571,8 +554,29 @@ export default function Page() {
                     >
                       ✨ 분석 중...
                     </motion.span>
+                  ) : profileAi.error ? (
+                    <span style={{ color: '#f87171' }}>{profileAi.error}</span>
+                  ) : partner.romanceStyle ? (
+                    <span style={{ lineHeight: 1.8 }}>{partner.romanceStyle}</span>
+                  ) : (
+                    <span style={{ color: '#9ca3af' }}>↺ 재생성 버튼을 눌러 분석을 시작하세요.</span>
                   )}
-                  {partner.attraction}
+                </div>
+                <div style={{ height: 12 }} />
+                <div className="text-box box-violet">
+                  <strong>끌리는 타입</strong>
+                  <br />
+                  {profileAi.loading ? (
+                    <motion.span
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                    >
+                      ✨ 분석 중...
+                    </motion.span>
+                  ) : (
+                    <span style={{ lineHeight: 1.8 }}>{partner.attraction}</span>
+                  )}
                 </div>
                 <div style={{ height: 12 }} />
                 <div className="text-box box-sky">

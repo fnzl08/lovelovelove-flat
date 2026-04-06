@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
       model: 'llama-3.3-70b-versatile',
       stream: true,
       temperature: 0.85,
-      max_tokens: 600,
+      max_tokens: 1200,
       messages: [
         { role: 'system', content: buildSystemPrompt() },
         { role: 'user', content: buildUserMessage(payload) },
