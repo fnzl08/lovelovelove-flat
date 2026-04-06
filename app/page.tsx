@@ -30,9 +30,9 @@ import {
   PolarRadiusAxis,
   CartesianGrid,
 } from 'recharts';
-import { calendarScores, userProfile, weekSeries, monthSeries } from '@/lib/data';
+import { userProfile } from '@/lib/data';
 import type { Partner } from '@/lib/data';
-import { clamp, makeInsight, tarotSpreadLabels, translateZodiac } from '@/lib/utils';
+import { clamp, makeInsight, tarotSpreadLabels, translateZodiac, generateMonthSeries, generateWeekSeries, generateCalendarScores, getTodayContact, getMonthlyAvg } from '@/lib/utils';
 import { PartnerAvatar, getAvatarLabel } from '@/lib/avatars';
 import { useAiStream } from '@/lib/hooks/useAiStream';
 import type { TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload, PartnerProfilePayload } from '@/lib/ai/types';
@@ -263,6 +263,12 @@ export default function Page() {
   const concentrationRisk = partner
     ? clamp(Math.round((100 - partner.compatibility.trust + (100 - partner.compatibility.stability)) / 3), 12, 68)
     : 0;
+
+  const partnerMonthSeries = useMemo(() => partner ? generateMonthSeries(partner) : [], [partner?.id, partner?.compatibility]);
+  const partnerWeekSeries = useMemo(() => partner ? generateWeekSeries(partner) : [], [partner?.id, partner?.compatibility]);
+  const partnerCalendarScores = useMemo(() => partner ? generateCalendarScores(partner) : [], [partner?.id, partner?.compatibility]);
+  const todayContact = partner ? getTodayContact(partner) : 0;
+  const monthlyAvg = partner ? getMonthlyAvg(partner) : 0;
 
   return (
     <main className="container">
@@ -642,9 +648,9 @@ export default function Page() {
                 <div className="cards-row">
                   <section className="score-card">
                     <div className="subtitle">오늘 연락운</div>
-                    <div className="score-number">71%</div>
+                    <div className="score-number">{todayContact}%</div>
                     <div className="subtitle" style={{ marginTop: 8 }}>
-                      답장은 오는 편. 다만 깊은 감정 확인보다 분위기 체크성일 수 있음.
+                      {todayContact >= 75 ? '연락 흐름 좋음. 자연스러운 대화 시작이 유리한 날.' : todayContact >= 55 ? '답장은 오는 편. 깊은 감정 확인보다 분위기 체크성일 수 있음.' : '오늘은 상대 에너지가 낮을 수 있음. 가볍게 유지하는 편이 나음.'}
                     </div>
                   </section>
                   <section className="score-card">
@@ -656,9 +662,9 @@ export default function Page() {
                   </section>
                   <section className="score-card">
                     <div className="subtitle">이번 달 애정운 평균</div>
-                    <div className="score-number">79점</div>
+                    <div className="score-number">{monthlyAvg}점</div>
                     <div className="subtitle" style={{ marginTop: 8 }}>
-                      감정 흐름은 우상향. 확정 이벤트는 후반부가 유리한 패턴.
+                      {monthlyAvg >= 75 ? '감정 흐름은 우상향. 확정 이벤트는 후반부가 유리한 패턴.' : monthlyAvg >= 55 ? '큰 변동 없이 안정적인 흐름. 작은 신호를 놓치지 않는 게 중요.' : '감정 에너지가 낮은 달. 무리한 진전보다 관계 유지에 집중.'}
                     </div>
                   </section>
                 </div>
@@ -672,7 +678,7 @@ export default function Page() {
                 <div className="grid-2">
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthSeries}>
+                      <LineChart data={partnerMonthSeries}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="day" />
                         <YAxis domain={[40, 100]} />
@@ -683,7 +689,7 @@ export default function Page() {
                   </div>
                   <div style={{ height: 260 }}>
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={weekSeries}>
+                      <LineChart data={partnerWeekSeries}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="day" />
                         <YAxis domain={[30, 100]} />
@@ -695,7 +701,7 @@ export default function Page() {
                 </div>
                 <div style={{ height: 16 }} />
                 <div className="month-calendar">
-                  {calendarScores.map((d) => (
+                  {partnerCalendarScores.map((d) => (
                     <div key={d.day} className="day-cell">
                       <div className="day-num">4/{d.day}</div>
                       <div className="day-score">{d.score}</div>

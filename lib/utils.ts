@@ -38,6 +38,56 @@ export function generateStory(partner: Partner) {
   return '급격한 폭발보다는 축적형 서사에 가깝다. 작은 신뢰와 일관된 반응이 쌓이면서 감정의 구조가 생긴다. 빠른 결론보다 서로의 속도를 존중할 때 가장 좋은 결과가 나온다.';
 }
 
+// 파트너 ID + 인덱스 기반 결정론적 난수 (같은 파트너는 항상 같은 값)
+function seededRand(seed: string, index: number): number {
+  let hash = 0;
+  const str = seed + String(index);
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash % 1000) / 1000;
+}
+
+export function generateMonthSeries(partner: Partner) {
+  const base = makeInsight(partner).avg;
+  const labels = ['4/01','4/05','4/09','4/13','4/17','4/21','4/25','4/29'];
+  return labels.map((day, i) => ({
+    day,
+    romance: clamp(Math.round(base + (seededRand(partner.id, i) - 0.5) * 32), 40, 100),
+  }));
+}
+
+export function generateWeekSeries(partner: Partner) {
+  const base = clamp(Math.round((partner.compatibility.communication + partner.compatibility.timing) / 2), 30, 95);
+  const days = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  return days.map((day, i) => ({
+    day,
+    contact: clamp(Math.round(base + (seededRand(partner.id + 'w', i) - 0.5) * 30), 30, 100),
+  }));
+}
+
+export function generateCalendarScores(partner: Partner) {
+  const base = makeInsight(partner).avg;
+  return Array.from({ length: 30 }, (_, i) => ({
+    day: i + 1,
+    score: clamp(Math.round(base + (seededRand(partner.id + 'c', i) - 0.5) * 26), 40, 100),
+  }));
+}
+
+export function getTodayContact(partner: Partner): number {
+  const base = clamp(
+    Math.round((partner.compatibility.chemistry + partner.compatibility.communication + partner.compatibility.timing) / 3),
+    30, 95
+  );
+  const dayOfWeek = new Date().getDay();
+  return clamp(Math.round(base + (seededRand(partner.id + 't', dayOfWeek) - 0.5) * 20), 30, 97);
+}
+
+export function getMonthlyAvg(partner: Partner): number {
+  return makeInsight(partner).avg;
+}
+
 export function tarotSpreadLabels(spread: 'three-card' | 'celtic-cross') {
   if (spread === 'three-card') {
     return ['1번 카드', '2번 카드', '3번 카드'];
