@@ -6,6 +6,15 @@ const ZODIAC_MAP: Record<string, string> = {
   Sagittarius: '사수자리', Capricorn: '염소자리', Aquarius: '물병자리', Pisces: '물고기자리',
 };
 
+export function getChartType(chart: Record<string, string>): string {
+  const sun = chart.sun ?? '';
+  if (/양자리|사자자리|사수자리|aries|leo|sagittarius/i.test(sun)) return '정열·주도형';
+  if (/황소자리|처녀자리|염소자리|taurus|virgo|capricorn/i.test(sun)) return '현실·안정형';
+  if (/쌍둥이자리|천칭자리|물병자리|gemini|libra|aquarius/i.test(sun)) return '소통·탐구형';
+  if (/게자리|전갈자리|물고기자리|cancer|scorpio|pisces/i.test(sun)) return '감성·직관형';
+  return '복합형';
+}
+
 export function translateZodiac(text: string): string {
   return Object.entries(ZODIAC_MAP).reduce(
     (t, [en, ko]) => t.replace(new RegExp(`\\b${en}\\b`, 'g'), ko),

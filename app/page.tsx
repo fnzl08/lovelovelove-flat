@@ -32,7 +32,7 @@ import {
 } from 'recharts';
 import { userProfile } from '@/lib/data';
 import type { Partner } from '@/lib/data';
-import { clamp, makeInsight, tarotSpreadLabels, translateZodiac, generateMonthSeries, generateWeekSeries, generateCalendarScores, getTodayContact, getMonthlyAvg } from '@/lib/utils';
+import { clamp, makeInsight, tarotSpreadLabels, translateZodiac, generateMonthSeries, generateWeekSeries, generateCalendarScores, getTodayContact, getMonthlyAvg, getChartType } from '@/lib/utils';
 import { PartnerAvatar, getAvatarLabel } from '@/lib/avatars';
 import { useAiStream } from '@/lib/hooks/useAiStream';
 import type { TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload, PartnerProfilePayload } from '@/lib/ai/types';
@@ -116,7 +116,7 @@ export default function Page() {
       id: Date.now().toString(),
       name: newName.trim(),
       mbti,
-      animal: getAvatarLabel(mbti),
+      animal: getAvatarLabel(mbti, chart.sun ?? ''),
       birth: { date: newBirthDate, time: newBirthTime, place: newBirthPlace },
       chart,
       romanceStyle: '',
@@ -457,7 +457,7 @@ export default function Page() {
                           <div>
                             <div style={{ fontWeight: 700 }}>{p.name}</div>
                             <div className="subtitle">
-                              {p.animal} · {p.mbti}
+                              {p.animal} · {getChartType(p.chart)}{p.mbti ? ` · ${p.mbti}` : ''}
                             </div>
                           </div>
                         </div>
@@ -519,7 +519,8 @@ export default function Page() {
                 </div>
                 <div className="panel-desc" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ display: 'inline-block', width: 28, height: 28 }}><PartnerAvatar partner={partner} /></span>
-                  {partner.animal} · 차트 패턴 기반 상징 동물
+                  {partner.animal} · {getChartType(partner.chart)}
+                  {partner.mbti && <span style={{ color: '#a78bfa' }}> · {partner.mbti}</span>}
                 </div>
                 <div className="kv-grid">
                   {Object.entries(partner.chart).map(([k, v]) => (

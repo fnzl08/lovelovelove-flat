@@ -16,16 +16,22 @@ function getColors(sunSign: string): AvatarColors {
 }
 
 // MBTI → 동물 매핑
-export function getAvatarAnimal(mbti: string): 'fox' | 'rabbit' | 'wolf' | 'otter' {
+export function getAvatarAnimal(mbti: string, sunSign = ''): 'fox' | 'rabbit' | 'wolf' | 'otter' {
   const m = mbti.toUpperCase();
-  if (/INT[JP]|ENT[JP]/.test(m)) return 'fox';     // NT: 여우 (전략적)
-  if (/INF[JP]|ENF[JP]/.test(m)) return 'rabbit';  // NF: 토끼 (섬세함)
-  if (/IST[JP]|EST[JP]/.test(m)) return 'wolf';    // ST: 늑대 (직관적 판단)
-  return 'otter';                                    // SF: 수달 (따뜻함)
+  if (/INT[JP]|ENT[JP]/.test(m)) return 'fox';
+  if (/INF[JP]|ENF[JP]/.test(m)) return 'rabbit';
+  if (/IST[JP]|EST[JP]/.test(m)) return 'wolf';
+  if (/ISF[JP]|ESF[JP]/.test(m)) return 'otter';
+  // MBTI 없을 때 태양별자리 원소로 파생
+  if (/양자리|사자자리|사수자리|aries|leo|sagittarius/i.test(sunSign)) return 'fox';
+  if (/황소자리|처녀자리|염소자리|taurus|virgo|capricorn/i.test(sunSign)) return 'wolf';
+  if (/쌍둥이자리|천칭자리|물병자리|gemini|libra|aquarius/i.test(sunSign)) return 'rabbit';
+  if (/게자리|전갈자리|물고기자리|cancer|scorpio|pisces/i.test(sunSign)) return 'otter';
+  return 'otter';
 }
 
-export function getAvatarLabel(mbti: string) {
-  const a = getAvatarAnimal(mbti);
+export function getAvatarLabel(mbti: string, sunSign = '') {
+  const a = getAvatarAnimal(mbti, sunSign);
   return { fox: '여우', rabbit: '토끼', wolf: '늑대', otter: '수달' }[a];
 }
 
@@ -137,7 +143,7 @@ function WolfSvg({ c }: { c: AvatarColors }) {
 export function PartnerAvatar({ partner }: { partner: Partner }) {
   const sunSign = partner.chart?.sun ?? '';
   const colors = getColors(sunSign);
-  const animal = getAvatarAnimal(partner.mbti);
+  const animal = getAvatarAnimal(partner.mbti, sunSign);
   if (animal === 'fox') return <FoxSvg c={colors} />;
   if (animal === 'rabbit') return <RabbitSvg c={colors} />;
   if (animal === 'wolf') return <WolfSvg c={colors} />;

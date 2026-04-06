@@ -119,27 +119,27 @@ ${notesText ? `\n상대 메모:\n- ${notesText}` : ''}
 }
 
 function buildPartnerProfileMessage(p: PartnerProfilePayload): string {
-  const chartSummary = Object.entries(p.partnerChart)
+  const chartLines = Object.entries(p.partnerChart)
     .map(([k, v]) => `${k}: ${v}`)
-    .join(', ');
+    .join('\n');
 
   return `파트너 프로필 분석 요청입니다.
 
 상대: ${p.partnerName}${p.partnerMbti ? ` (${p.partnerMbti})` : ''}
-${chartSummary ? `상대 차트: ${chartSummary}` : '(차트 정보 없음)'}
+${chartLines ? `상대 나탈 차트:\n${chartLines}` : '(차트 정보 없음)'}
 
 아래 형식을 정확히 지켜서 출력해주세요. 다른 텍스트나 설명은 추가하지 마세요.
 
 [연애스타일]
-(${p.partnerName}의 나탈 차트 기반 연애 스타일 — 80자 이내)
+(${p.partnerName}의 나탈 차트에서 드러나는 연애 접근 방식을 분석해주세요. 태양·금성·화성 배치를 중심으로, 실제 연애에서 어떻게 행동하고 어떤 패턴이 나타나는지 구체적 차트 요소를 언급하며 3~4문장으로 상세히 서술해주세요.)
 
 [끌리는타입]
-(${p.partnerName}이 끌리는 상대 유형 — 80자 이내)
+(${p.partnerName}이 끌리는 상대 유형을 분석해주세요. 금성·달·ASC 배치를 기반으로, 어떤 분위기·태도·특성을 가진 사람에게 끌리는지, 그리고 나의 차트와 어떤 접점이 있는지 3~4문장으로 상세히 서술해주세요.)
 
 [점수]
 chemistry:N stability:N communication:N timing:N trust:N
 
-점수는 0~100 사이 정수로, 나의 차트와 ${p.partnerName}의 차트 시너지를 기준으로 추정하세요.`;
+점수는 0~100 사이 정수로, 나의 차트와 ${p.partnerName}의 차트 시너지를 각 항목별로 추정해주세요.`;
 }
 
 function buildEventLogMessage(p: EventLogPayload): string {
