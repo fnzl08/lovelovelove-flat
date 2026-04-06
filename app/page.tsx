@@ -35,7 +35,7 @@ import type { Partner } from '@/lib/data';
 import { clamp, makeInsight, tarotSpreadLabels, translateZodiac } from '@/lib/utils';
 import { PartnerAvatar, getAvatarLabel } from '@/lib/avatars';
 import { useAiStream } from '@/lib/hooks/useAiStream';
-import type { TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload } from '@/lib/ai/types';
+import type { TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload, PartnerProfilePayload } from '@/lib/ai/types';
 import { supabase } from '@/lib/supabase';
 
 const tabs = [
@@ -97,6 +97,8 @@ export default function Page() {
   const storyAi = useAiStream();
   const aspectAi = useAiStream();
   const eventAi = useAiStream();
+  const profileAi = useAiStream();
+  const [generatingProfileFor, setGeneratingProfileFor] = useState('');
 
   function savePartner() {
     if (!newName.trim()) return;
@@ -147,10 +149,10 @@ export default function Page() {
   );
   const labels = tarotSpreadLabels(tarotSpread);
 
-  // 파트너 상세 탭 진입 시 스토리 자동 생성
+  // 파트너 상세 탭 진입 시 자동 생성
   useEffect(() => {
     if (partner && tab === 'detail') {
-      const payload: PartnerStoryPayload = {
+      const storyPayload: PartnerStoryPayload = {
         feature: 'partnerStory',
         partnerName: partner.name,
         partnerMbti: partner.mbti,
@@ -159,10 +161,83 @@ export default function Page() {
         partnerNotes: partner.notes,
         recentEvents: logs.filter((e) => e.partner === partner.name).slice(-5),
       };
-      storyAi.run(payload);
+      storyAi.run(storyPayload);
+
+      // 연애스타일/끌리는타입/점수 미생성 시 자동 생성
+      if (!partner.romanceStyle && Object.keys(partner.chart).length > 0) {
+        const profilePayload: PartnerProfilePayload = {
+          feature: 'partnerProfile',
+          partnerName: partner.name,
+          partnerMbti: partner.mbti,
+          partnerChart: partner.chart,
+        };
+        setGeneratingProfileFor(partner.id);
+        profileAi.run(profilePayload);
+      }
+
+      // 애스팩트 분석 미생성 시 자동 실행
+      if (partner.notes.length === 0) {
+        const aspectPayload: AspectAnalysisPayload = {
+          feature: 'aspectAnalysis',
+          partnerName: partner.name,
+          partnerChart: partner.chart,
+          partnerNotes: partner.notes,
+        };
+        aspectAi.run(aspectPayload);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partner?.id, tab]);
+
+  // profileAi 완료 시 파싱 → 상태 업데이트 → Supabase 저장
+  useEffect(() => {
+    if (!profileAi.loading && profileAi.text && generatingProfileFor) {
+      const raw = profileAi.text;
+      const romanceMatch = raw.match(/\[연애스타일\]\s*([\s\S]*?)(?=\[끌리는타입\]|\[점수\]|$)/);
+      const attractionMatch = raw.match(/\[끌리는타입\]\s*([\s\S]*?)(?=\[점수\]|$)/);
+      const scoreMatch = raw.match(/chemistry:(\d+)\s+stability:(\d+)\s+communication:(\d+)\s+timing:(\d+)\s+trust:(\d+)/);
+
+      const romanceStyle = romanceMatch ? romanceMatch[1].trim() : '';
+      const attraction = attractionMatch ? attractionMatch[1].trim() : '';
+      const compatibility = scoreMatch
+        ? {
+            chemistry: Number(scoreMatch[1]),
+            stability: Number(scoreMatch[2]),
+            communication: Number(scoreMatch[3]),
+            timing: Number(scoreMatch[4]),
+            trust: Number(scoreMatch[5]),
+          }
+        : null;
+
+      const pid = generatingProfileFor;
+      setGeneratingProfileFor('');
+
+      if (romanceStyle || attraction || compatibility) {
+        setPartnerList((prev) =>
+          prev.map((p) =>
+            p.id === pid
+              ? {
+                  ...p,
+                  romanceStyle: romanceStyle || p.romanceStyle,
+                  attraction: attraction || p.attraction,
+                  compatibility: compatibility ?? p.compatibility,
+                }
+              : p
+          )
+        );
+        supabase
+          .from('partners')
+          .update({
+            ...(romanceStyle && { romance_style: romanceStyle }),
+            ...(attraction && { attraction }),
+            ...(compatibility && { compatibility }),
+          })
+          .eq('id', pid)
+          .then(({ error }) => { if (error) console.error('프로필 저장 실패:', error.message); });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profileAi.loading, profileAi.text]);
 
   function onChangeSpread(next: 'three-card' | 'celtic-cross') {
     setTarotSpread(next);
@@ -452,12 +527,44 @@ export default function Page() {
                 <div className="text-box box-pink">
                   <strong>연애 스타일</strong>
                   <br />
-                  {partner.romanceStyle}
+                  {profileAi.loading && !partner.romanceStyle && (
+                    <motion.span
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                    >
+                      ✨ 분석 중...
+                    </motion.span>
+                  )}
+                  {profileAi.error && !partner.romanceStyle && (
+                    <span style={{ color: '#f87171' }}>{profileAi.error}</span>
+                  )}
+                  {partner.romanceStyle || (!profileAi.loading && !profileAi.error && (
+                    <button className="btn" style={{ marginTop: 4 }} onClick={() => {
+                      const payload: PartnerProfilePayload = {
+                        feature: 'partnerProfile',
+                        partnerName: partner.name,
+                        partnerMbti: partner.mbti,
+                        partnerChart: partner.chart,
+                      };
+                      setGeneratingProfileFor(partner.id);
+                      profileAi.run(payload);
+                    }}>AI 프로필 생성</button>
+                  ))}
                 </div>
                 <div style={{ height: 12 }} />
                 <div className="text-box box-violet">
                   <strong>끌리는 타입</strong>
                   <br />
+                  {profileAi.loading && !partner.attraction && (
+                    <motion.span
+                      initial={{ opacity: 0.5 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ duration: 0.8, repeat: Infinity, repeatType: 'reverse' }}
+                    >
+                      ✨ 분석 중...
+                    </motion.span>
+                  )}
                   {partner.attraction}
                 </div>
                 <div style={{ height: 12 }} />

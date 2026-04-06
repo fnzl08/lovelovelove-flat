@@ -3,10 +3,13 @@ import { NextRequest } from 'next/server';
 import { buildSystemPrompt, buildUserMessage } from '@/lib/ai/prompts';
 import type { AiRequestPayload } from '@/lib/ai/types';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = new OpenAI({
+  apiKey: process.env.GROQ_API_KEY,
+  baseURL: 'https://api.groq.com/openai/v1',
+});
 
 export async function POST(req: NextRequest) {
-  if (!process.env.OPENAI_API_KEY) {
+  if (!process.env.GROQ_API_KEY) {
     return new Response('API 키가 설정되지 않았습니다.', { status: 500 });
   }
 
@@ -20,7 +23,7 @@ export async function POST(req: NextRequest) {
   let stream;
   try {
     stream = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'llama-3.3-70b-versatile',
       stream: true,
       temperature: 0.85,
       max_tokens: 600,
@@ -31,6 +34,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'OpenAI 호출 실패';
+    if (msg.includes('429') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit')) {
+      return new Response('OpenAI 크레딧 한도 초과. platform.openai.com/billing 에서 결제를 확인해 주세요.', { status: 429 });
+    }
     return new Response(msg, { status: 500 });
   }
 

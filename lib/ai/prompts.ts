@@ -1,5 +1,5 @@
 import { userProfile } from '@/lib/data';
-import type { AiRequestPayload, TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload } from './types';
+import type { AiRequestPayload, TarotPayload, PartnerStoryPayload, AspectAnalysisPayload, EventLogPayload, PartnerProfilePayload } from './types';
 
 export function buildSystemPrompt(): string {
   const chart = Object.entries(userProfile.chart)
@@ -36,6 +36,8 @@ export function buildUserMessage(payload: AiRequestPayload): string {
       return buildAspectAnalysisMessage(payload);
     case 'eventLog':
       return buildEventLogMessage(payload);
+    case 'partnerProfile':
+      return buildPartnerProfileMessage(payload);
   }
 }
 
@@ -114,6 +116,30 @@ ${chartSummary ? `상대 차트:\n${chartSummary}` : '(차트 정보 없음)'}
 ${notesText ? `\n상대 메모:\n- ${notesText}` : ''}
 
 나의 네이탈 차트와 ${p.partnerName}의 차트를 비교해서, 두 차트 사이에서 읽히는 핵심 시너지와 긴장 포인트를 분석해주세요. 실용적인 관계 인사이트를 중심으로 해주세요.`;
+}
+
+function buildPartnerProfileMessage(p: PartnerProfilePayload): string {
+  const chartSummary = Object.entries(p.partnerChart)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(', ');
+
+  return `파트너 프로필 분석 요청입니다.
+
+상대: ${p.partnerName}${p.partnerMbti ? ` (${p.partnerMbti})` : ''}
+${chartSummary ? `상대 차트: ${chartSummary}` : '(차트 정보 없음)'}
+
+아래 형식을 정확히 지켜서 출력해주세요. 다른 텍스트나 설명은 추가하지 마세요.
+
+[연애스타일]
+(${p.partnerName}의 나탈 차트 기반 연애 스타일 — 80자 이내)
+
+[끌리는타입]
+(${p.partnerName}이 끌리는 상대 유형 — 80자 이내)
+
+[점수]
+chemistry:N stability:N communication:N timing:N trust:N
+
+점수는 0~100 사이 정수로, 나의 차트와 ${p.partnerName}의 차트 시너지를 기준으로 추정하세요.`;
 }
 
 function buildEventLogMessage(p: EventLogPayload): string {

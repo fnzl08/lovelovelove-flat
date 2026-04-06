@@ -39,8 +39,16 @@ export interface EventLogPayload {
   partnerCompatibility: Record<string, number>;
 }
 
+export interface PartnerProfilePayload {
+  feature: 'partnerProfile';
+  partnerName: string;
+  partnerMbti: string;
+  partnerChart: Record<string, string>;
+}
+
 export type AiRequestPayload =
   | TarotPayload
   | PartnerStoryPayload
   | AspectAnalysisPayload
-  | EventLogPayload;
+  | EventLogPayload
+  | PartnerProfilePayload;
